@@ -1,9 +1,9 @@
 use support::Dispatch;
 
 mod balances;
+mod proof_of_existence;
 mod support;
 mod system;
-mod proof_of_existence;
 
 mod types {
 	use crate::{support, RuntimeCall};
@@ -15,16 +15,19 @@ mod types {
 	pub type Extrinsic = support::Extrinsic<AccountId, RuntimeCall>;
 	pub type Header = support::Header<BlockNumber>;
 	pub type Block = support::Block<Header, Extrinsic>;
+	pub type Content = String;
 }
 
 pub enum RuntimeCall {
 	Balances(balances::Call<Runtime>),
+	ProofOfExistence(proof_of_existence::Call<Runtime>),
 }
 
 #[derive(Debug)]
 pub struct Runtime {
 	system: system::Pallet<Runtime>,
 	balances: balances::Pallet<Runtime>,
+	proof_of_existence: proof_of_existence::Pallet<Runtime>,
 }
 
 impl system::Config for Runtime {
@@ -37,9 +40,17 @@ impl balances::Config for Runtime {
 	type Balance = types::Balance;
 }
 
+impl proof_of_existence::Config for Runtime {
+	type Content = types::Content;
+}
+
 impl Runtime {
 	fn new() -> Self {
-		Self { system: system::Pallet::new(), balances: balances::Pallet::new() }
+		Self {
+			system: system::Pallet::new(),
+			balances: balances::Pallet::new(),
+			proof_of_existence: proof_of_existence::Pallet::new(),
+		}
 	}
 
 	fn execute_block(&mut self, block: types::Block) -> support::DispatchResult {
@@ -75,6 +86,9 @@ impl support::Dispatch for Runtime {
 			RuntimeCall::Balances(call) => {
 				self.balances.dispatch(caller, call)?;
 			},
+			RuntimeCall::ProofOfExistence(call) => {
+				self.proof_of_existence.dispatch(caller, call)?;
+			},
 		}
 		Ok(())
 	}
@@ -88,28 +102,51 @@ fn main() {
 	let bob = "bob".to_string();
 	let charlie = "charlie".to_string();
 
-    runtime.balances.set_balance(&alice, 100);
-    runtime.balances.set_balance(&bob, 0);
+	runtime.balances.set_balance(&alice, 100);
+	runtime.balances.set_balance(&bob, 0);
 
-    let block_1 = types::Block {
-        header: types::Header {block_number: 1},
-        extrinsics: vec![
-            support::Extrinsic {
-                caller: alice.clone(),
-                call: RuntimeCall::Balances(balances::Call::Transfer { to: bob.clone(), amount: 40 })
-            },
-            support::Extrinsic {
-                caller: alice.clone(),
-                call: RuntimeCall::Balances(balances::Call::Transfer { to: charlie.clone(), amount: 20 })
-            },
-            support::Extrinsic {
-                caller: alice.clone(),
-                call: RuntimeCall::Balances(balances::Call::Transfer { to: charlie.clone(), amount: 20 })
-            },
-        ]
-    };
+	let block_1 = types::Block {
+		header: types::Header { block_number: 1 },
+		extrinsics: vec![
+			support::Extrinsic {
+				caller: alice.clone(),
+				call: RuntimeCall::Balances(balances::Call::Transfer {
+					to: bob.clone(),
+					amount: 40,
+				}),
+			},
+			support::Extrinsic {
+				caller: alice.clone(),
+				call: RuntimeCall::Balances(balances::Call::Transfer {
+					to: charlie.clone(),
+					amount: 20,
+				}),
+			},
+			support::Extrinsic {
+				caller: alice.clone(),
+				call: RuntimeCall::Balances(balances::Call::Transfer {
+					to: charlie.clone(),
+					amount: 20,
+				}),
+			},
+		],
+	};
 
-    runtime.execute_block(block_1).expect("Wront Block");
+	let generic_claim = "Generic Claim".to_string();
+	let poe_block = types::Block {
+		header: types::Header { block_number: 2 },
+		extrinsics: vec![support::Extrinsic {
+			caller: alice.clone(),
+			call: RuntimeCall::ProofOfExistence(proof_of_existence::Call::CreateClaim {
+				claim: generic_claim.clone(),
+			}),
+		}],
+	};
+
+	runtime.execute_block(block_1).expect("Wront Block");
+	runtime
+		.execute_block(poe_block)
+		.expect("Something went wrong wen creating claim");
 
 	println!("{:?}", runtime)
 }
